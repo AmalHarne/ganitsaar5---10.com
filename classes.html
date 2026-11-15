@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="mr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ऑनलाइन वर्ग — गणितसार</title>
+<style>
+  :root { --bg:#f6f7fb; --card:#fff; --ink:#1d2433; --muted:#667085; --brand:#3b5bdb; --ok:#2f9e44; --bad:#e03131; --line:#e4e7ec; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1420; --card:#171d2c; --ink:#e8ecf4; --muted:#9aa4b8; --brand:#748ffc; --line:#2a3246; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, "Noto Sans Devanagari", "Mangal", sans-serif; background:var(--bg); color:var(--ink); }
+  header { padding:16px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; max-width:820px; margin:0 auto; }
+  h1 { font-size:1.25rem; margin:0; }
+  main { max-width:820px; margin:0 auto; padding:0 16px 40px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .grow { flex:1 1 220px; }
+  label { display:block; font-size:.8rem; color:var(--muted); margin-bottom:4px; }
+  input, select { width:100%; padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--ink); font:inherit; }
+  button, .btn { padding:10px 16px; border:0; border-radius:8px; background:var(--brand); color:#fff; font:inherit; font-weight:600; cursor:pointer; text-decoration:none; display:inline-block; }
+  button.ghost { background:transparent; color:var(--bad); border:1px solid var(--line); }
+  .btn.live { background:var(--ok); }
+  .meta { color:var(--muted); font-size:.9rem; margin-top:2px; }
+  .badge { font-size:.75rem; padding:2px 8px; border-radius:99px; background:var(--ok); color:#fff; margin-left:6px; }
+  #teacher { display:none; border-color:var(--brand); }
+  #who { color:var(--muted); font-size:.85rem; }
+  .empty { color:var(--muted); text-align:center; padding:28px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📚 गणितसार — ऑनलाइन वर्ग</h1>
+  <div class="row">
+    <span id="who"></span>
+    <div id="gbtn"></div>
+  </div>
+</header>
+
+<main>
+  <section id="teacher" class="card">
+    <h2 style="margin-top:0;font-size:1.05rem">वर्ग ठरवा (फक्त शिक्षक)</h2>
+    <div class="row">
+      <div class="grow"><label for="t">विषय</label><input id="t" maxlength="120" placeholder="उदा. भूमिती — त्रिकोण"></div>
+      <div style="width:110px"><label for="s">इयत्ता</label>
+        <select id="s"><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option selected>10</option></select></div>
+      <div class="grow"><label for="d">तारीख व वेळ</label><input id="d" type="datetime-local"></div>
+      <div style="width:130px"><label for="r">किती आठवडे</label>
+        <select id="r"><option value="1">एकदाच</option><option value="4">४ आठवडे</option><option value="8">८ आठवडे</option><option value="12">१२ आठवडे</option></select></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="create">वर्ग तयार करा</button>
+      <button id="now" class="btn live" type="button">आत्ता सुरू करा</button>
+      <span id="msg" class="meta"></span>
+    </div>
+  </section>
+
+  <div id="list"><div class="empty">लोड होत आहे…</div></div>
+</main>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var token = null, adminEmail = "", classes = [];
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]; }); }
+  function api(method, url, body) {
+    var h = { "Content-Type": "application/json" };
+    if (token) h.Authorization = "Bearer " + token;
+    return fetch(url, { method: method, headers: h, body: body ? JSON.stringify(body) : undefined })
+      .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error || "Error"); return j; }); });
+  }
+
+  function render() {
+    var now = Date.now();
+    if (!classes.length) { $("list").innerHTML = '<div class="empty">सध्या कोणताही वर्ग ठरलेला नाही.</div>'; return; }
+    $("list").innerHTML = classes.map(function (c) {
+      var t = new Date(c.startsAt).getTime();
+      var live = now >= t - 10 * 60e3 && now <= t + 2 * 3600e3;
+      var when = new Date(c.startsAt).toLocaleString("mr-IN", { dateStyle: "medium", timeStyle: "short" });
+      var room = "/room.html?room=" + encodeURIComponent(c.room) + "&title=" + encodeURIComponent(c.title);
+      return '<div class="card"><div class="row"><div class="grow"><strong>' + esc(c.title) + '</strong>' +
+        (live ? '<span class="badge">सुरू आहे</span>' : '') +
+        '<div class="meta">इयत्ता ' + esc(c.std) + ' · ' + esc(when) + '</div></div>' +
+        '<a class="btn' + (live ? ' live' : '') + '" href="' + room + '">सहभागी व्हा</a>' +
+        (isTeacher() ? '<button class="ghost" data-del="' + esc(c.id) + '">हटवा</button>' : '') +
+        '</div></div>';
+    }).join("");
+  }
+  function isTeacher() { return !!token && $("teacher").style.display === "block"; }
+
+  function load() {
+    return api("GET", "/api/classes").then(function (l) { classes = l; render(); }).catch(function () {
+      $("list").innerHTML = '<div class="empty">वर्ग लोड होऊ शकले नाहीत. पेज रिफ्रेश करा.</div>';
+    });
+  }
+
+  function onSignIn(resp) {
+    token = resp.credential;
+    var email = "";
+    try { email = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).email.toLowerCase(); } catch (e) {}
+    $("who").textContent = email;
+    // Convenience only. The server re-checks the Google token on every change.
+    $("teacher").style.display = email === adminEmail ? "block" : "none";
+    render();
+  }
+
+  function create(startIso, weeks) {
+    var title = $("t").value.trim() || "गणिताचा वर्ग";
+    $("msg").textContent = "तयार होत आहे…";
+    api("POST", "/api/classes", { title: title, std: $("s").value, startsAt: startIso, repeatWeeks: weeks })
+      .then(function (made) {
+        $("msg").textContent = "✔ तयार झाले";
+        return load().then(function () { return made; });
+      })
+      .catch(function (e) { $("msg").textContent = "❌ " + e.message; });
+  }
+  $("create").onclick = function () {
+    if (!$("d").value) { $("msg").textContent = "तारीख व वेळ निवडा"; return; }
+    create(new Date($("d").value).toISOString(), parseInt($("r").value, 10));
+  };
+  $("now").onclick = function () {
+    var title = $("t").value.trim() || "गणिताचा वर्ग";
+    api("POST", "/api/classes", { title: title, std: $("s").value, startsAt: new Date().toISOString(), repeatWeeks: 1 })
+      .then(function (made) { location.href = "/room.html?room=" + encodeURIComponent(made[0].room) + "&title=" + encodeURIComponent(title); })
+      .catch(function (e) { $("msg").textContent = "❌ " + e.message; });
+  };
+  $("list").addEventListener("click", function (e) {
+    var id = e.target && e.target.getAttribute("data-del");
+    if (!id || !confirm("हा वर्ग हटवायचा?")) return;
+    api("DELETE", "/api/classes/" + encodeURIComponent(id)).then(load).catch(function (er) { alert(er.message); });
+  });
+
+  // Show classes immediately; Google sign-in loads in the background.
+  load();
+  setInterval(render, 60000); // refresh "live" badges
+  api("GET", "/api/config").then(function (cfg) {
+    adminEmail = (cfg.adminEmail || "").toLowerCase();
+    if (!cfg.clientId) { $("who").textContent = "Google sign-in not configured"; return; }
+    var tries = 0;
+    (function wait() {
+      if (window.google && google.accounts) {
+        google.accounts.id.initialize({ client_id: cfg.clientId, callback: onSignIn, auto_select: true });
+        google.accounts.id.renderButton($("gbtn"), { theme: "outline", size: "medium", text: "signin_with" });
+        google.accounts.id.prompt();
+      } else if (tries++ < 50) setTimeout(wait, 150);
+    })();
+  });
+})();
+</script>
+</body>
+</html>
